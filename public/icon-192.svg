@@ -1,0 +1,19 @@
+<svg width="192" height="192" viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="192" height="192" fill="#0a0c0e"/>
+  <rect x="16" y="16" width="160" height="160" stroke="#3a3e44" stroke-width="2" fill="none"/>
+  <rect x="32" y="32" width="128" height="128" stroke="#5a6066" stroke-width="1" fill="none"/>
+  <!-- Crosshair -->
+  <circle cx="96" cy="96" r="40" stroke="#c0c5ce" stroke-width="2" fill="none"/>
+  <circle cx="96" cy="96" r="20" stroke="#c0c5ce" stroke-width="1" fill="none"/>
+  <line x1="96" y1="46" x2="96" y2="76" stroke="#c0c5ce" stroke-width="2"/>
+  <line x1="96" y1="116" x2="96" y2="146" stroke="#c0c5ce" stroke-width="2"/>
+  <line x1="46" y1="96" x2="76" y2="96" stroke="#c0c5ce" stroke-width="2"/>
+  <line x1="116" y1="96" x2="146" y2="96" stroke="#c0c5ce" stroke-width="2"/>
+  <!-- Center dot -->
+  <circle cx="96" cy="96" r="4" fill="#c9a227"/>
+  <!-- Corner accents -->
+  <path d="M16 48 L16 16 L48 16" stroke="#c9a227" stroke-width="2" fill="none"/>
+  <path d="M144 16 L176 16 L176 48" stroke="#c9a227" stroke-width="2" fill="none"/>
+  <path d="M176 144 L176 176 L144 176" stroke="#c9a227" stroke-width="2" fill="none"/>
+  <path d="M48 176 L16 176 L16 144" stroke="#c9a227" stroke-width="2" fill="none"/>
+</svg>
