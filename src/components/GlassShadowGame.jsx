@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 
 // ============ THEMES ============
 const THEMES = {
@@ -74,8 +74,8 @@ const SloanePanel = ({ message, expanded, onToggle, onConverse, gameState, theme
   const snark = ["I'm your handler, not therapist.", "Save it for debrief.", "Focus, Grey."];
   
   return (
-    <div style={{ background: theme.bg.panel, borderColor: theme.chrome.dark }} className="border-b">
-      <div style={{ borderColor: theme.chrome.dark }} className="px-4 py-2 flex items-center justify-between cursor-pointer border-b" onClick={onToggle}>
+    <div style={{ background: theme.bg.panel, borderColor: theme.chrome.dark }} className="border-b flex-shrink-0">
+      <div style={{ borderColor: theme.chrome.dark }} className="px-4 py-2 flex items-center justify-between cursor-pointer border-b active:bg-white/5" onClick={onToggle}>
         <div className="flex items-center gap-3">
           <div style={{ borderColor: theme.chrome.medium, background: `${theme.chrome.dark}40` }} className="w-10 h-10 border flex items-center justify-center">
             <svg viewBox="0 0 40 48" className="w-8 h-8" stroke={theme.chrome.bright} fill="none" strokeWidth="0.8">
@@ -85,10 +85,10 @@ const SloanePanel = ({ message, expanded, onToggle, onConverse, gameState, theme
           </div>
           <div>
             <div style={{ color: theme.chrome.bright }} className="font-mono text-sm">SLOANE</div>
-            <div style={{ color: theme.chrome.dim }} className="font-mono text-xs">LINK {fx.garble > 0.2 ? '▓UNSTABLE▓' : 'ACTIVE'}</div>
+            <div style={{ color: theme.chrome.dim }} className="font-mono text-xs">{fx.garble > 0.2 ? '▓UNSTABLE▓' : 'LINK ACTIVE'}</div>
           </div>
         </div>
-        <span style={{ color: theme.chrome.dim }} className="font-mono text-xs">{expanded ? '[-]' : '[+]'}</span>
+        <span style={{ color: theme.chrome.dim }} className="font-mono text-xs select-none">{expanded ? '[-]' : '[+]'}</span>
       </div>
       
       <div className={`transition-all duration-300 overflow-hidden ${expanded ? 'max-h-96' : 'max-h-16'}`}>
@@ -106,14 +106,14 @@ const SloanePanel = ({ message, expanded, onToggle, onConverse, gameState, theme
                 {options.map((o, i) => (
                   <button key={i} onClick={() => { onConverse(o.resp); setChatting(false); }}
                     style={{ borderColor: theme.chrome.dark, color: theme.chrome.medium }}
-                    className="w-full p-2 border text-left font-mono text-xs hover:bg-white/5">▸ {o.label}</button>
+                    className="w-full p-3 border text-left font-mono text-xs active:bg-white/10">▸ {o.label}</button>
                 ))}
                 <button onClick={() => { onConverse(snark[Math.floor(Math.random() * snark.length)]); setChatting(false); }}
-                  style={{ color: theme.chrome.dim }} className="w-full p-2 font-mono text-xs italic">▸ [Just checking...]</button>
+                  style={{ color: theme.chrome.dim }} className="w-full p-3 font-mono text-xs italic">▸ [Just checking...]</button>
               </div>
             ) : (
               <button onClick={() => setChatting(true)} style={{ borderColor: theme.chrome.medium, color: theme.chrome.bright }}
-                className="w-full py-2 border font-mono text-xs hover:bg-white/5">[ CONVERSE ]</button>
+                className="w-full py-3 border font-mono text-xs active:bg-white/10">[ CONVERSE ]</button>
             )}
           </div>
         )}
@@ -122,59 +122,243 @@ const SloanePanel = ({ message, expanded, onToggle, onConverse, gameState, theme
   );
 };
 
-// ============ MAP PANEL ============
+// ============ ENHANCED MAP PANEL ============
 const MapPanel = ({ rooms, currentRoom, onRoomClick, expanded, onToggle, theme }) => {
   const [detail, setDetail] = useState(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [lastTouchDist, setLastTouchDist] = useState(0);
+  const mapRef = useRef(null);
+  
   const room = rooms[currentRoom];
+  
+  // Room flavor text
   const textures = {
-    server_room_a: '░▒▓█▓▒░ Servers humming. Cold.',
-    server_room_b: '█▓▒░░▒▓█ Primary data center.',
-    corridor_b: '│ │ │ │ Long sightlines.',
-    vault_ante: '╔══╗╔══╗ Reinforced walls.',
-    vault: '▣▣▣▣▣▣ Deposit boxes.',
-    entry: '═══════ Service corridor.',
+    server_a: '░▒▓ Servers hum. Cold air.',
+    server_b: '█▓▒ Primary data center.',
+    corridor: '│ │ Long sightlines. Patrol.',
+    vault_ante: '╔══╗ Reinforced. Guard post.',
+    vault: '▣▣▣ Deposit boxes. Target.',
+    entry: '═══ Service corridor. Start.',
   };
+
+  // Touch handlers for pan/zoom
+  const handleTouchStart = useCallback((e) => {
+    if (e.touches.length === 1) {
+      setIsDragging(true);
+      setDragStart({ x: e.touches[0].clientX - pan.x, y: e.touches[0].clientY - pan.y });
+    } else if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[1].clientX - e.touches[0].clientX,
+        e.touches[1].clientY - e.touches[0].clientY
+      );
+      setLastTouchDist(dist);
+    }
+  }, [pan]);
+
+  const handleTouchMove = useCallback((e) => {
+    e.preventDefault();
+    if (e.touches.length === 1 && isDragging) {
+      setPan({
+        x: e.touches[0].clientX - dragStart.x,
+        y: e.touches[0].clientY - dragStart.y
+      });
+    } else if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[1].clientX - e.touches[0].clientX,
+        e.touches[1].clientY - e.touches[0].clientY
+      );
+      if (lastTouchDist > 0) {
+        const scale = dist / lastTouchDist;
+        setZoom(z => Math.min(3, Math.max(0.5, z * scale)));
+      }
+      setLastTouchDist(dist);
+    }
+  }, [isDragging, dragStart, lastTouchDist]);
+
+  const handleTouchEnd = useCallback(() => {
+    setIsDragging(false);
+    setLastTouchDist(0);
+  }, []);
+
+  const resetView = () => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+
+  // Calculate viewBox based on rooms
+  const visibleRooms = Object.values(rooms).filter(r => r.visibility !== 'hidden');
+  const minX = Math.min(...visibleRooms.map(r => r.x)) - 50;
+  const maxX = Math.max(...visibleRooms.map(r => r.x)) + 50;
+  const minY = Math.min(...visibleRooms.map(r => r.y)) - 30;
+  const maxY = Math.max(...visibleRooms.map(r => r.y)) + 30;
   
   return (
-    <div style={{ background: theme.bg.panel, borderColor: theme.chrome.dark }} className="border-b">
-      <div className="px-4 py-2 flex justify-between cursor-pointer" onClick={onToggle}>
+    <div style={{ background: theme.bg.panel, borderColor: theme.chrome.dark }} className="border-b flex-shrink-0">
+      <div className="px-4 py-2 flex justify-between items-center cursor-pointer active:bg-white/5" onClick={onToggle}>
         <span style={{ color: theme.chrome.medium }} className="font-mono text-xs">MAP // {room?.name}</span>
-        <span style={{ color: theme.chrome.dim }} className="font-mono text-xs">{expanded ? '[-]' : '[+]'}</span>
-      </div>
-      
-      <div className={`transition-all duration-300 overflow-hidden ${expanded ? 'max-h-64' : 'max-h-0'}`}>
-        <div className="px-4 pb-3">
-          <svg viewBox="0 0 320 100" className="w-full h-28">
-            {Object.values(rooms).filter(r => r.visibility !== 'hidden').map(r =>
-              r.exits?.filter(e => rooms[e]?.visibility !== 'hidden').map(exitId => {
-                const t = rooms[exitId]; if (!t) return null;
-                return <line key={`${r.id}-${exitId}`} x1={r.x} y1={r.y} x2={t.x} y2={t.y}
-                  stroke={theme.chrome.dim} strokeWidth="1" strokeDasharray="4,4" opacity="0.5"/>;
-              })
-            )}
-            {Object.values(rooms).filter(r => r.visibility !== 'hidden').map(r => {
-              const curr = r.id === currentRoom;
-              const canGo = room?.exits?.includes(r.id);
-              const susp = r.visibility === 'suspected';
-              return (
-                <g key={r.id} onClick={() => canGo ? onRoomClick(r.id) : setDetail(detail === r.id ? null : r.id)} className="cursor-pointer">
-                  <rect x={r.x - 32} y={r.y - 12} width="64" height="24"
-                    fill={curr ? `${theme.chrome.dark}60` : theme.bg.panel}
-                    stroke={curr ? theme.chrome.bright : susp ? theme.chrome.dark : r.cleared ? theme.accent.success : theme.chrome.medium}
-                    strokeWidth={curr ? 2 : 1} strokeDasharray={susp ? '3,3' : 'none'}/>
-                  {curr && <circle cx={r.x - 20} cy={r.y} r="3" fill={theme.chrome.bright}><animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite"/></circle>}
-                  <text x={r.x} y={r.y + 3} textAnchor="middle" fill={susp ? theme.chrome.dark : theme.chrome.medium} fontSize="6" fontFamily="monospace">
-                    {susp ? '[???]' : r.name?.substring(0, 10)}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
-          {detail && rooms[detail] && (
-            <div style={{ background: theme.bg.secondary, borderColor: theme.chrome.dark }} className="border p-2 mt-2">
-              <div style={{ color: theme.chrome.dim }} className="font-mono text-xs">{textures[detail] || rooms[detail].name}</div>
+        <div className="flex items-center gap-3">
+          {expanded && (
+            <div className="flex gap-1">
+              <button onClick={(e) => { e.stopPropagation(); setZoom(z => Math.min(3, z * 1.3)); }}
+                style={{ color: theme.chrome.dim }} className="w-6 h-6 font-mono text-xs border border-current active:bg-white/10">+</button>
+              <button onClick={(e) => { e.stopPropagation(); setZoom(z => Math.max(0.5, z / 1.3)); }}
+                style={{ color: theme.chrome.dim }} className="w-6 h-6 font-mono text-xs border border-current active:bg-white/10">-</button>
+              <button onClick={(e) => { e.stopPropagation(); resetView(); }}
+                style={{ color: theme.chrome.dim }} className="w-6 h-6 font-mono text-xs border border-current active:bg-white/10">⌂</button>
             </div>
           )}
+          <span style={{ color: theme.chrome.dim }} className="font-mono text-xs select-none">{expanded ? '[-]' : '[+]'}</span>
+        </div>
+      </div>
+      
+      <div className={`transition-all duration-300 overflow-hidden ${expanded ? 'max-h-80' : 'max-h-0'}`}>
+        <div className="px-2 pb-3">
+          {/* Map Container with touch handlers */}
+          <div 
+            ref={mapRef}
+            className="relative overflow-hidden touch-none"
+            style={{ height: '180px', background: theme.bg.secondary, border: `1px solid ${theme.chrome.dark}` }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            {/* Grid overlay */}
+            <div className="absolute inset-0 pointer-events-none opacity-10"
+              style={{
+                backgroundImage: `linear-gradient(${theme.chrome.dim}40 1px, transparent 1px), linear-gradient(90deg, ${theme.chrome.dim}40 1px, transparent 1px)`,
+                backgroundSize: '20px 20px'
+              }}
+            />
+            
+            <svg 
+              viewBox={`${minX} ${minY} ${maxX - minX} ${maxY - minY}`}
+              className="w-full h-full"
+              style={{ 
+                transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
+                transformOrigin: 'center'
+              }}
+            >
+              {/* Connection lines - thin, dashed */}
+              {Object.values(rooms).filter(r => r.visibility !== 'hidden').map(r =>
+                r.exits?.filter(e => rooms[e]?.visibility !== 'hidden').map(exitId => {
+                  const t = rooms[exitId]; 
+                  if (!t) return null;
+                  const isAccessible = room?.exits?.includes(exitId) || room?.exits?.includes(r.id);
+                  return (
+                    <line 
+                      key={`${r.id}-${exitId}`} 
+                      x1={r.x} y1={r.y} 
+                      x2={t.x} y2={t.y}
+                      stroke={isAccessible ? theme.chrome.medium : theme.chrome.dark}
+                      strokeWidth="0.5"
+                      strokeDasharray="3,3"
+                      opacity={isAccessible ? 0.8 : 0.3}
+                    />
+                  );
+                })
+              )}
+              
+              {/* Room nodes */}
+              {Object.values(rooms).filter(r => r.visibility !== 'hidden').map(r => {
+                const isCurrent = r.id === currentRoom;
+                const canGo = room?.exits?.includes(r.id);
+                const isSuspected = r.visibility === 'suspected';
+                const isCleared = r.cleared;
+                
+                // Determine room color
+                let strokeColor = theme.chrome.medium;
+                if (isCurrent) strokeColor = theme.chrome.bright;
+                else if (isSuspected) strokeColor = theme.chrome.dark;
+                else if (isCleared) strokeColor = theme.accent.success;
+                
+                return (
+                  <g 
+                    key={r.id} 
+                    onClick={() => canGo ? onRoomClick(r.id) : setDetail(detail === r.id ? null : r.id)} 
+                    className="cursor-pointer"
+                    style={{ touchAction: 'manipulation' }}
+                  >
+                    {/* Room box - thin border */}
+                    <rect 
+                      x={r.x - 28} y={r.y - 10} 
+                      width="56" height="20"
+                      fill={isCurrent ? `${theme.chrome.dark}40` : 'transparent'}
+                      stroke={strokeColor}
+                      strokeWidth={isCurrent ? 1 : 0.5}
+                      strokeDasharray={isSuspected ? '2,2' : 'none'}
+                      rx="1"
+                    />
+                    
+                    {/* Current room indicator - pulsing dot */}
+                    {isCurrent && (
+                      <circle cx={r.x - 20} cy={r.y} r="2" fill={theme.chrome.bright}>
+                        <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite"/>
+                      </circle>
+                    )}
+                    
+                    {/* Accessible room indicator */}
+                    {canGo && !isCurrent && (
+                      <circle cx={r.x + 20} cy={r.y} r="1.5" fill={theme.accent.cyan} opacity="0.8">
+                        <animate attributeName="r" values="1.5;2.5;1.5" dur="2s" repeatCount="indefinite"/>
+                      </circle>
+                    )}
+                    
+                    {/* Cleared checkmark */}
+                    {isCleared && !isCurrent && (
+                      <text x={r.x + 22} y={r.y + 3} fill={theme.accent.success} fontSize="8" fontFamily="monospace">✓</text>
+                    )}
+                    
+                    {/* Room label */}
+                    <text 
+                      x={r.x} y={r.y + 3} 
+                      textAnchor="middle" 
+                      fill={isSuspected ? theme.chrome.dark : theme.chrome.medium} 
+                      fontSize="5" 
+                      fontFamily="monospace"
+                      style={{ userSelect: 'none' }}
+                    >
+                      {isSuspected ? '[???]' : r.name?.substring(0, 8)}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+            
+            {/* Zoom level indicator */}
+            <div className="absolute bottom-1 left-2 font-mono text-xs" style={{ color: theme.chrome.dark }}>
+              {Math.round(zoom * 100)}%
+            </div>
+          </div>
+          
+          {/* Room detail panel */}
+          {detail && rooms[detail] && (
+            <div style={{ background: theme.bg.secondary, borderColor: theme.chrome.dark }} className="border border-t-0 p-2">
+              <div className="flex justify-between items-center">
+                <span style={{ color: theme.chrome.medium }} className="font-mono text-xs">{rooms[detail].name}</span>
+                {rooms[detail].cleared && <span style={{ color: theme.accent.success }} className="font-mono text-xs">CLEAR</span>}
+              </div>
+              <div style={{ color: theme.chrome.dim }} className="font-mono text-xs mt-1">{textures[detail] || rooms[detail].narrative?.substring(0, 40)}</div>
+            </div>
+          )}
+          
+          {/* Legend */}
+          <div className="flex justify-center gap-4 mt-2">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full" style={{ background: theme.chrome.bright }}/>
+              <span style={{ color: theme.chrome.dim }} className="font-mono text-xs">YOU</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full" style={{ background: theme.accent.cyan }}/>
+              <span style={{ color: theme.chrome.dim }} className="font-mono text-xs">GO</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2" style={{ border: `1px dashed ${theme.chrome.dark}` }}/>
+              <span style={{ color: theme.chrome.dim }} className="font-mono text-xs">???</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -201,13 +385,14 @@ const CommandLine = ({ actions, onCommand, theme }) => {
   const opts = verb ? getOpts(verb) : [];
   
   return (
-    <div style={{ background: theme.bg.panel, borderColor: theme.chrome.dark }} className="border-t">
+    <div style={{ background: theme.bg.panel, borderColor: theme.chrome.dark }} className="border-t flex-shrink-0">
       <div className="flex">
         {verbs.map(v => (
           <button key={v.id} onClick={() => setVerb(verb === v.id ? null : v.id)}
             style={{ borderColor: theme.chrome.dark, color: verb === v.id ? theme.chrome.bright : theme.chrome.medium,
                      background: verb === v.id ? `${theme.chrome.dark}60` : 'transparent' }}
-            className="flex-1 py-3 border-r last:border-r-0 font-mono text-xs">
+            className="flex-1 py-3 border-r last:border-r-0 font-mono text-xs active:bg-white/10 select-none"
+            >
             <div className="text-lg">{v.icon}</div><div>{v.id}</div>
           </button>
         ))}
@@ -217,7 +402,7 @@ const CommandLine = ({ actions, onCommand, theme }) => {
           {opts.map((o, i) => (
             <button key={i} onClick={() => { onCommand(o); setVerb(null); }}
               style={{ borderColor: theme.chrome.dark, color: theme.chrome.medium }}
-              className="w-full p-2 border text-left font-mono text-xs hover:bg-white/5">▸ {o.label}</button>
+              className="w-full p-3 border text-left font-mono text-xs active:bg-white/10">▸ {o.label}</button>
           ))}
         </div>
       )}
@@ -238,13 +423,13 @@ const StatusPanel = ({ gameState, theme }) => {
         <span style={{ color: theme.accent[col] }} className="font-mono text-xs">{status}</span>
       </div>
       <div style={{ background: theme.chrome.dark }} className="h-2 rounded">
-        <div className="h-full rounded transition-all" style={{ width: `${(value/max)*100}%`, background: theme.accent[col] }}/>
+        <div className="h-full rounded transition-all duration-300" style={{ width: `${(value/max)*100}%`, background: theme.accent[col] }}/>
       </div>
     </div>
   );
   
   return (
-    <div style={{ background: theme.bg.panel, borderColor: theme.chrome.dark }} className="border-t px-2 py-3">
+    <div style={{ background: theme.bg.panel, borderColor: theme.chrome.dark }} className="border-t px-2 py-3 flex-shrink-0">
       <div className="flex">
         <Bar label="COVER" value={gameState.cover} max={100} status={cover} col={cover === 'SOLID' ? 'success' : cover === 'THIN' ? 'warning' : 'danger'}/>
         <Bar label="HEAT" value={gameState.heat} max={100} status={heat} col={heat === 'GHOST' ? 'success' : heat === 'NOTICED' ? 'warning' : 'danger'}/>
@@ -331,7 +516,7 @@ const HumanChallenge = ({ challenge, onAction, onComplete, gameState, theme }) =
       <div className="grid grid-cols-2 gap-2">
         {acts.map(a => (
           <button key={a.id} onClick={() => doAction(a)} style={{ borderColor: theme.chrome.dark, color: theme.chrome.medium }}
-            className="p-2 border font-mono text-xs hover:bg-white/5">[{a.id}]</button>
+            className="p-3 border font-mono text-xs active:bg-white/10">[{a.id}]</button>
         ))}
       </div>
       {fx.penalty < 0 && <div style={{ color: theme.accent.warning }} className="text-center font-mono text-xs mt-2">⚠ Pulse affecting rolls ({fx.penalty})</div>}
@@ -384,11 +569,11 @@ const TerminalChallenge = ({ onAction, onComplete, theme }) => {
         {syms.map((s, i) => (
           <button key={i} onClick={() => input(i)} disabled={seq.length >= 4}
             style={{ borderColor: theme.chrome.dark, color: theme.chrome.bright }}
-            className="py-3 border text-lg hover:bg-white/10 disabled:opacity-30">{s}</button>
+            className="py-3 border text-lg active:bg-white/10 disabled:opacity-30">{s}</button>
         ))}
       </div>
       <button onClick={() => { setSeq([]); setFeedback([]); }} style={{ borderColor: theme.chrome.dark, color: theme.chrome.dim }}
-        className="w-full py-2 border font-mono text-xs">[CLEAR]</button>
+        className="w-full py-2 border font-mono text-xs active:bg-white/10">[CLEAR]</button>
     </div>
   );
 };
@@ -427,7 +612,7 @@ const SurveillanceChallenge = ({ onAction, onComplete, theme }) => {
         {phases.map((_, i) => <div key={i} className="w-3 h-3 rounded-full" style={{ background: i === phase ? (window ? theme.accent.success : theme.accent.danger) : theme.chrome.dark }}/>)}
       </div>
       <button onClick={move} disabled={moved} style={{ borderColor: window ? theme.accent.success : theme.accent.danger, color: window ? theme.accent.success : theme.accent.danger }}
-        className="w-full py-3 border font-mono text-sm disabled:opacity-50">{moved ? (window ? '[CLEAR]' : '[DETECTED]') : '[MOVE]'}</button>
+        className="w-full py-3 border font-mono text-sm disabled:opacity-50 active:bg-white/10">{moved ? (window ? '[CLEAR]' : '[DETECTED]') : '[MOVE]'}</button>
     </div>
   );
 };
@@ -451,14 +636,14 @@ const PuzzleChallenge = ({ challenge, onAction, onComplete, theme }) => {
       <div className="flex justify-center gap-4 mb-4">
         {dials.map((v, i) => (
           <div key={i} className="flex flex-col items-center">
-            <button onClick={() => adj(i, 1)} style={{ borderColor: theme.chrome.dark, color: theme.chrome.medium }} className="w-12 h-8 border hover:bg-white/5">▲</button>
+            <button onClick={() => adj(i, 1)} style={{ borderColor: theme.chrome.dark, color: theme.chrome.medium }} className="w-12 h-10 border active:bg-white/10">▲</button>
             <div style={{ borderColor: theme.chrome.medium, color: theme.chrome.bright }} className="w-12 h-14 border-x flex items-center justify-center text-2xl font-mono">{v}</div>
-            <button onClick={() => adj(i, -1)} style={{ borderColor: theme.chrome.dark, color: theme.chrome.medium }} className="w-12 h-8 border hover:bg-white/5">▼</button>
+            <button onClick={() => adj(i, -1)} style={{ borderColor: theme.chrome.dark, color: theme.chrome.medium }} className="w-12 h-10 border active:bg-white/10">▼</button>
           </div>
         ))}
       </div>
       {challenge.hint && <div style={{ color: theme.chrome.dim }} className="text-center font-mono text-xs mb-4 italic">HINT: {challenge.hint}</div>}
-      <button onClick={tryOpen} style={{ borderColor: theme.chrome.medium, color: theme.chrome.bright }} className="w-full py-3 border font-mono text-sm hover:bg-white/5">[OPEN]</button>
+      <button onClick={tryOpen} style={{ borderColor: theme.chrome.medium, color: theme.chrome.bright }} className="w-full py-3 border font-mono text-sm active:bg-white/10">[OPEN]</button>
     </div>
   );
 };
@@ -496,7 +681,7 @@ const SearchChallenge = ({ challenge, onAction, onComplete, gameState, theme }) 
           return (
             <button key={s.id} onClick={() => search(s)} disabled={done}
               style={{ borderColor: got ? theme.accent.success : done ? theme.chrome.dark : theme.chrome.medium, color: got ? theme.accent.success : done ? theme.chrome.dark : theme.chrome.medium }}
-              className="p-3 border font-mono text-xs disabled:cursor-default hover:bg-white/5">{s.name}{got && ' ✓'}</button>
+              className="p-3 border font-mono text-xs disabled:cursor-default active:bg-white/10">{s.name}{got && ' ✓'}</button>
           );
         })}
       </div>
@@ -526,7 +711,7 @@ const Dossier = ({ mission, onBegin, theme }) => {
   const advance = () => { if (isTyping) skip(); else if (sec < secs.length - 1) setSec(s => s + 1); else onBegin(); };
   
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: theme.bg.primary }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 safe-area-inset" style={{ background: theme.bg.primary }}>
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
           <div style={{ color: theme.chrome.dim }} className="font-mono text-xs mb-2">▰▰▰ CLASSIFIED ▰▰▰</div>
@@ -541,7 +726,7 @@ const Dossier = ({ mission, onBegin, theme }) => {
         <div className="flex justify-center gap-2 mb-4">
           {secs.map((_, i) => <div key={i} className="w-2 h-2 rounded-full" style={{ background: i <= sec ? theme.chrome.bright : theme.chrome.dark }}/>)}
         </div>
-        <button onClick={advance} style={{ borderColor: theme.chrome.medium, color: theme.chrome.bright }} className="w-full py-3 border font-mono text-sm hover:bg-white/5">
+        <button onClick={advance} style={{ borderColor: theme.chrome.medium, color: theme.chrome.bright }} className="w-full py-4 border font-mono text-sm active:bg-white/10">
           {isTyping ? '[SKIP]' : sec < secs.length - 1 ? '[CONTINUE]' : '[BEGIN]'}
         </button>
       </div>
@@ -606,7 +791,39 @@ export default function GlassShadowGame() {
     return c.status === 'active';
   }) || [], [room]);
   
-  useEffect(() => { if (phase === 'active') { const int = setInterval(() => setGs(p => ({ ...p, pulse: Math.max(60, p.pulse - 1) })), 3000); return () => clearInterval(int); } }, [phase]);
+  // Pulse recovery over time
+  useEffect(() => { 
+    if (phase === 'active') { 
+      const int = setInterval(() => setGs(p => ({ ...p, pulse: Math.max(60, p.pulse - 1) })), 3000); 
+      return () => clearInterval(int); 
+    } 
+  }, [phase]);
+
+  // Prevent iOS bounce/overscroll
+  useEffect(() => {
+    const preventDefault = (e) => {
+      if (e.touches.length > 1) return; // Allow pinch zoom on map
+      const target = e.target;
+      // Allow scrolling in scrollable containers
+      if (target.closest('.overflow-auto, .overflow-y-auto')) return;
+      e.preventDefault();
+    };
+    
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.height = '100%';
+    
+    document.addEventListener('touchmove', preventDefault, { passive: false });
+    
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+      document.removeEventListener('touchmove', preventDefault);
+    };
+  }, []);
   
   const begin = () => { setPhase('active'); setSloane(SLOANE.entry); };
   const goRoom = (id) => {
@@ -657,20 +874,62 @@ export default function GlassShadowGame() {
   
   if (phase === 'dossier') return <Dossier mission={MISSION} onBegin={begin} theme={theme}/>;
   
+  // Victory screen
+  if (phase === 'complete') {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: theme.bg.primary }}>
+        <div className="w-full max-w-md text-center">
+          <div style={{ color: theme.accent.success }} className="font-mono text-xs mb-2">▰▰▰ MISSION COMPLETE ▰▰▰</div>
+          <div style={{ color: theme.chrome.bright }} className="font-mono text-xl mb-6">GLASS SHADOW</div>
+          <div style={{ background: theme.bg.panel, borderColor: theme.chrome.dark }} className="border p-4 mb-4 text-left">
+            <div style={{ color: theme.chrome.medium }} className="font-mono text-xs mb-2">DEBRIEF</div>
+            <div style={{ color: theme.text.primary }} className="font-mono text-sm space-y-2">
+              <div>Cover: <span style={{ color: gs.cover > 50 ? theme.accent.success : theme.accent.warning }}>{gs.cover}%</span></div>
+              <div>Heat: <span style={{ color: gs.heat < 50 ? theme.accent.success : theme.accent.warning }}>{gs.heat}%</span></div>
+              <div>Items: {gs.inventory.length}</div>
+              <div>Objectives: <span style={{ color: theme.accent.success }}>COMPLETE</span></div>
+            </div>
+          </div>
+          <button onClick={() => { setPhase('dossier'); setRooms(ROOMS); setCurr('entry'); setGs({ cover: 90, heat: 5, pulse: 68, inventory: [], intel: [], objectives: [] }); }}
+            style={{ borderColor: theme.chrome.medium, color: theme.chrome.bright }}
+            className="w-full py-4 border font-mono text-sm active:bg-white/10">[REPLAY]</button>
+        </div>
+      </div>
+    );
+  }
+  
   return (
-    <div className="w-full max-w-md mx-auto min-h-screen flex flex-col relative overflow-hidden" style={{ background: theme.bg.primary, fontFamily: "'Courier New', monospace" }}>
+    <div 
+      className="w-full max-w-md mx-auto flex flex-col relative overflow-hidden select-none" 
+      style={{ 
+        background: theme.bg.primary, 
+        fontFamily: "'Courier New', monospace",
+        height: '100vh',
+        height: '100dvh', // Dynamic viewport height for iOS
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+        paddingLeft: 'env(safe-area-inset-left)',
+        paddingRight: 'env(safe-area-inset-right)',
+      }}
+    >
+      {/* Scanline overlay */}
       <div className="absolute inset-0 pointer-events-none z-50 opacity-20" style={{ background: 'repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0,0,0,0.4) 1px, rgba(0,0,0,0.4) 2px)' }}/>
-      <button onClick={() => setThemeKey(t => t === 'silver' ? 'dos' : 'silver')} style={{ color: theme.chrome.dim }} className="absolute top-2 right-2 z-50 font-mono text-xs opacity-50 hover:opacity-100">[{themeKey.toUpperCase()}]</button>
       
+      {/* Theme toggle */}
+      <button onClick={() => setThemeKey(t => t === 'silver' ? 'dos' : 'silver')} style={{ color: theme.chrome.dim }} 
+        className="absolute top-2 right-2 z-50 font-mono text-xs opacity-50 active:opacity-100 p-2">[{themeKey.toUpperCase()}]</button>
+      
+      {/* Fixed header panels */}
       <SloanePanel message={sloane} expanded={sloaneExp} onToggle={() => setSloaneExp(!sloaneExp)} onConverse={converse} gameState={gs} theme={theme}/>
       <MapPanel rooms={rooms} currentRoom={curr} onRoomClick={goRoom} expanded={mapExp} onToggle={() => setMapExp(!mapExp)} theme={theme}/>
       
-      <div className="flex-grow overflow-auto" style={{ background: theme.bg.panel }}>
+      {/* Scrollable content area */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden" style={{ background: theme.bg.panel, WebkitOverflowScrolling: 'touch' }}>
         {challenge ? (
           <div>
-            <div style={{ borderColor: theme.chrome.dark }} className="px-4 py-2 border-b flex justify-between">
+            <div style={{ borderColor: theme.chrome.dark }} className="px-4 py-2 border-b flex justify-between sticky top-0" style={{ background: theme.bg.panel }}>
               <span style={{ color: theme.chrome.bright }} className="font-mono text-xs">{challenge.type.toUpperCase()}</span>
-              <button onClick={() => setChallenge(null)} style={{ color: theme.chrome.dim }} className="font-mono text-xs">[BACK]</button>
+              <button onClick={() => setChallenge(null)} style={{ color: theme.chrome.dim }} className="font-mono text-xs p-1 active:bg-white/10">[BACK]</button>
             </div>
             {renderChallenge()}
           </div>
@@ -678,10 +937,10 @@ export default function GlassShadowGame() {
           <div className="p-4">
             <div className="flex justify-between mb-3">
               <span style={{ color: theme.chrome.bright }} className="font-mono text-xs">INVENTORY</span>
-              <button onClick={() => setShowInv(false)} style={{ color: theme.chrome.dim }} className="font-mono text-xs">[CLOSE]</button>
+              <button onClick={() => setShowInv(false)} style={{ color: theme.chrome.dim }} className="font-mono text-xs p-1 active:bg-white/10">[CLOSE]</button>
             </div>
             {gs.inventory.length ? gs.inventory.map((i, idx) => (
-              <div key={idx} style={{ borderColor: theme.chrome.dark, color: theme.chrome.medium }} className="border p-2 mb-2 font-mono text-xs">{i.name}</div>
+              <div key={idx} style={{ borderColor: theme.chrome.dark, color: theme.chrome.medium }} className="border p-3 mb-2 font-mono text-xs">{i.name}</div>
             )) : <div style={{ color: theme.chrome.dim }} className="font-mono text-xs">Empty.</div>}
           </div>
         ) : (
@@ -692,6 +951,7 @@ export default function GlassShadowGame() {
         )}
       </div>
       
+      {/* Fixed footer panels */}
       {!challenge && !showInv && <CommandLine actions={actions} onCommand={cmd} theme={theme}/>}
       <StatusPanel gameState={gs} theme={theme}/>
     </div>
