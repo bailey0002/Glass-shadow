@@ -927,7 +927,7 @@ export default function GlassShadowGame() {
       <div className="flex-1 overflow-y-auto overflow-x-hidden" style={{ background: theme.bg.panel, WebkitOverflowScrolling: 'touch' }}>
         {challenge ? (
           <div>
-            <div style={{ borderColor: theme.chrome.dark }} className="px-4 py-2 border-b flex justify-between sticky top-0" style={{ background: theme.bg.panel }}>
+            <div style={{ borderColor: theme.chrome.dark, background: theme.bg.panel }} className="px-4 py-2 border-b flex justify-between sticky top-0">
               <span style={{ color: theme.chrome.bright }} className="font-mono text-xs">{challenge.type.toUpperCase()}</span>
               <button onClick={() => setChallenge(null)} style={{ color: theme.chrome.dim }} className="font-mono text-xs p-1 active:bg-white/10">[BACK]</button>
             </div>
