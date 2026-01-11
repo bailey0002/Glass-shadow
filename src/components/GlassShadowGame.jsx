@@ -188,12 +188,8 @@ const MapPanel = ({ rooms, currentRoom, onRoomClick, expanded, onToggle, theme }
     setPan({ x: 0, y: 0 });
   };
 
-  // Calculate viewBox based on rooms
-  const visibleRooms = Object.values(rooms).filter(r => r.visibility !== 'hidden');
-  const minX = Math.min(...visibleRooms.map(r => r.x)) - 50;
-  const maxX = Math.max(...visibleRooms.map(r => r.x)) + 50;
-  const minY = Math.min(...visibleRooms.map(r => r.y)) - 30;
-  const maxY = Math.max(...visibleRooms.map(r => r.y)) + 30;
+  // Expanded viewBox to include context rooms
+  const viewBox = "-100 -60 460 280";
   
   return (
     <div style={{ background: theme.bg.panel, borderColor: theme.chrome.dark }} className="border-b flex-shrink-0">
@@ -214,19 +210,19 @@ const MapPanel = ({ rooms, currentRoom, onRoomClick, expanded, onToggle, theme }
         </div>
       </div>
       
-      <div className={`transition-all duration-300 overflow-hidden ${expanded ? 'max-h-80' : 'max-h-0'}`}>
+      <div className={`transition-all duration-300 overflow-hidden ${expanded ? 'max-h-96' : 'max-h-0'}`}>
         <div className="px-2 pb-3">
           {/* Map Container with touch handlers */}
           <div 
             ref={mapRef}
             className="relative overflow-hidden touch-none"
-            style={{ height: '180px', background: theme.bg.secondary, border: `1px solid ${theme.chrome.dark}` }}
+            style={{ height: '220px', background: theme.bg.secondary, border: `1px solid ${theme.chrome.dark}` }}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
             {/* Grid overlay */}
-            <div className="absolute inset-0 pointer-events-none opacity-10"
+            <div className="absolute inset-0 pointer-events-none opacity-5"
               style={{
                 backgroundImage: `linear-gradient(${theme.chrome.dim}40 1px, transparent 1px), linear-gradient(90deg, ${theme.chrome.dim}40 1px, transparent 1px)`,
                 backgroundSize: '20px 20px'
@@ -234,14 +230,64 @@ const MapPanel = ({ rooms, currentRoom, onRoomClick, expanded, onToggle, theme }
             />
             
             <svg 
-              viewBox={`${minX} ${minY} ${maxX - minX} ${maxY - minY}`}
+              viewBox={viewBox}
               className="w-full h-full"
               style={{ 
                 transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
                 transformOrigin: 'center'
               }}
             >
-              {/* Connection lines - thin, dashed */}
+              {/* Floor labels */}
+              <text x="-90" y="-45" fill={theme.chrome.dark} fontSize="6" fontFamily="monospace" opacity="0.5">FLOOR 2</text>
+              <text x="-90" y="80" fill={theme.chrome.dark} fontSize="6" fontFamily="monospace" opacity="0.5">FLOOR 1</text>
+              <text x="-90" y="175" fill={theme.chrome.dark} fontSize="6" fontFamily="monospace" opacity="0.5">BASEMENT</text>
+              
+              {/* Target zone outline */}
+              <rect x="20" y="20" width="270" height="140" fill="none" stroke={theme.chrome.dark} strokeWidth="0.5" strokeDasharray="4,4" opacity="0.3"/>
+              <text x="25" y="30" fill={theme.chrome.dark} fontSize="5" fontFamily="monospace" opacity="0.4">TARGET ZONE</text>
+              
+              {/* Context room connections - very faint */}
+              {CONTEXT_CONNECTIONS.map(([from, to], i) => {
+                const fromRoom = CONTEXT_ROOMS.find(r => r.id === from) || rooms[from];
+                const toRoom = CONTEXT_ROOMS.find(r => r.id === to) || rooms[to];
+                if (!fromRoom || !toRoom) return null;
+                return (
+                  <line 
+                    key={`ctx-${i}`}
+                    x1={fromRoom.x} y1={fromRoom.y}
+                    x2={toRoom.x} y2={toRoom.y}
+                    stroke={theme.chrome.dark}
+                    strokeWidth="0.3"
+                    strokeDasharray="2,4"
+                    opacity="0.3"
+                  />
+                );
+              })}
+              
+              {/* Context rooms - greyed out, non-interactive */}
+              {CONTEXT_ROOMS.map(r => (
+                <g key={r.id} opacity="0.25">
+                  <rect 
+                    x={r.x - 24} y={r.y - 8} 
+                    width="48" height="16"
+                    fill="none"
+                    stroke={theme.chrome.dark}
+                    strokeWidth="0.3"
+                    rx="1"
+                  />
+                  <text 
+                    x={r.x} y={r.y + 2} 
+                    textAnchor="middle" 
+                    fill={theme.chrome.dark} 
+                    fontSize="4" 
+                    fontFamily="monospace"
+                  >
+                    {r.name}
+                  </text>
+                </g>
+              ))}
+              
+              {/* Active room connections - thin, dashed */}
               {Object.values(rooms).filter(r => r.visibility !== 'hidden').map(r =>
                 r.exits?.filter(e => rooms[e]?.visibility !== 'hidden').map(exitId => {
                   const t = rooms[exitId]; 
@@ -252,16 +298,16 @@ const MapPanel = ({ rooms, currentRoom, onRoomClick, expanded, onToggle, theme }
                       key={`${r.id}-${exitId}`} 
                       x1={r.x} y1={r.y} 
                       x2={t.x} y2={t.y}
-                      stroke={isAccessible ? theme.chrome.medium : theme.chrome.dark}
+                      stroke={isAccessible ? theme.chrome.medium : theme.chrome.dim}
                       strokeWidth="0.5"
                       strokeDasharray="3,3"
-                      opacity={isAccessible ? 0.8 : 0.3}
+                      opacity={isAccessible ? 0.8 : 0.4}
                     />
                   );
                 })
               )}
               
-              {/* Room nodes */}
+              {/* Active room nodes */}
               {Object.values(rooms).filter(r => r.visibility !== 'hidden').map(r => {
                 const isCurrent = r.id === currentRoom;
                 const canGo = room?.exits?.includes(r.id);
@@ -271,7 +317,7 @@ const MapPanel = ({ rooms, currentRoom, onRoomClick, expanded, onToggle, theme }
                 // Determine room color
                 let strokeColor = theme.chrome.medium;
                 if (isCurrent) strokeColor = theme.chrome.bright;
-                else if (isSuspected) strokeColor = theme.chrome.dark;
+                else if (isSuspected) strokeColor = theme.chrome.dim;
                 else if (isCleared) strokeColor = theme.accent.success;
                 
                 return (
@@ -281,6 +327,17 @@ const MapPanel = ({ rooms, currentRoom, onRoomClick, expanded, onToggle, theme }
                     className="cursor-pointer"
                     style={{ touchAction: 'manipulation' }}
                   >
+                    {/* Target highlight glow */}
+                    {r.isTarget && !isSuspected && (
+                      <rect 
+                        x={r.x - 30} y={r.y - 12} 
+                        width="60" height="24"
+                        fill={`${theme.accent.gold}10`}
+                        stroke="none"
+                        rx="2"
+                      />
+                    )}
+                    
                     {/* Room box - thin border */}
                     <rect 
                       x={r.x - 28} y={r.y - 10} 
@@ -315,7 +372,7 @@ const MapPanel = ({ rooms, currentRoom, onRoomClick, expanded, onToggle, theme }
                     <text 
                       x={r.x} y={r.y + 3} 
                       textAnchor="middle" 
-                      fill={isSuspected ? theme.chrome.dark : theme.chrome.medium} 
+                      fill={isSuspected ? theme.chrome.dim : theme.chrome.medium} 
                       fontSize="5" 
                       fontFamily="monospace"
                       style={{ userSelect: 'none' }}
@@ -357,6 +414,10 @@ const MapPanel = ({ rooms, currentRoom, onRoomClick, expanded, onToggle, theme }
             <div className="flex items-center gap-1">
               <div className="w-2 h-2" style={{ border: `1px dashed ${theme.chrome.dark}` }}/>
               <span style={{ color: theme.chrome.dim }} className="font-mono text-xs">???</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2" style={{ background: `${theme.accent.gold}40` }}/>
+              <span style={{ color: theme.chrome.dim }} className="font-mono text-xs">TARGET</span>
             </div>
           </div>
         </div>
@@ -744,24 +805,59 @@ const MISSION = {
   sloaneNotes: "Grey, Webb's no amateur. Chen might be an asset. I'll be in your ear."
 };
 
+// Context rooms - non-interactive, just for visual depth
+const CONTEXT_ROOMS = [
+  // Floor 1 - Lobby level
+  { id: 'ctx_lobby', name: 'LOBBY', x: -60, y: 140, floor: 1 },
+  { id: 'ctx_reception', name: 'RECEPTION', x: -60, y: 100, floor: 1 },
+  { id: 'ctx_security', name: 'SECURITY', x: -60, y: 60, floor: 1 },
+  { id: 'ctx_elevator', name: 'ELEVATOR', x: -20, y: 100, floor: 1 },
+  // Floor 1 - East wing
+  { id: 'ctx_cafe', name: 'CAFETERIA', x: 320, y: 140, floor: 1 },
+  { id: 'ctx_break', name: 'BREAK RM', x: 320, y: 100, floor: 1 },
+  { id: 'ctx_storage', name: 'STORAGE', x: 320, y: 60, floor: 1 },
+  // Floor 2 - Offices (above target area)
+  { id: 'ctx_exec', name: 'EXEC SUITE', x: 100, y: -30, floor: 2 },
+  { id: 'ctx_conf', name: 'CONF ROOM', x: 180, y: -30, floor: 2 },
+  { id: 'ctx_office1', name: 'OFFICE', x: 260, y: -30, floor: 2 },
+  // Basement - Mechanical
+  { id: 'ctx_hvac', name: 'HVAC', x: 60, y: 180, floor: 'B' },
+  { id: 'ctx_power', name: 'POWER', x: 140, y: 180, floor: 'B' },
+  { id: 'ctx_telecom', name: 'TELECOM', x: 220, y: 180, floor: 'B' },
+];
+
+// Context connections - visual only
+const CONTEXT_CONNECTIONS = [
+  // Lobby wing
+  ['ctx_lobby', 'ctx_reception'], ['ctx_reception', 'ctx_security'], ['ctx_reception', 'ctx_elevator'],
+  // East wing  
+  ['ctx_cafe', 'ctx_break'], ['ctx_break', 'ctx_storage'],
+  // Floor 2
+  ['ctx_exec', 'ctx_conf'], ['ctx_conf', 'ctx_office1'],
+  // Basement
+  ['ctx_hvac', 'ctx_power'], ['ctx_power', 'ctx_telecom'],
+  // Cross-floor suggestions (elevator shaft visual)
+  ['ctx_elevator', 'entry'],
+];
+
 const ROOMS = {
-  entry: { id: 'entry', name: 'ENTRY', x: 40, y: 80, visibility: 'known', cleared: true, narrative: "Service corridor. Your way in.", intel: ['Keycard needed'], challenges: [], exits: ['server_a'] },
-  server_a: { id: 'server_a', name: 'SERVER A', x: 100, y: 40, visibility: 'known', cleared: false, narrative: "Servers humming. Technician at terminal.", intel: ['One tech', 'Terminal access'],
+  entry: { id: 'entry', name: 'ENTRY', x: 40, y: 80, visibility: 'known', cleared: true, narrative: "Service corridor. Your way in.", intel: ['Keycard needed'], challenges: [], exits: ['server_a'], isTarget: true },
+  server_a: { id: 'server_a', name: 'SERVER A', x: 120, y: 40, visibility: 'known', cleared: false, narrative: "Servers humming. Technician at terminal.", intel: ['One tech', 'Terminal access'],
     challenges: [{ id: 'tech', type: 'human', status: 'active', npc: { name: 'ALAN PRICE', role: 'TECH', composure: 65, suspicion: 20, compliance: 15 }},
                  { id: 'term', type: 'terminal', status: 'locked', requires: 'tech' }],
-    exits: ['entry', 'server_b', 'corridor'], exitVisibility: { corridor: 'suspected' } },
-  server_b: { id: 'server_b', name: 'SERVER B', x: 180, y: 40, visibility: 'known', cleared: false, narrative: "Primary data center.", intel: ['Hidden safe'],
+    exits: ['entry', 'server_b', 'corridor'], exitVisibility: { corridor: 'suspected' }, isTarget: true },
+  server_b: { id: 'server_b', name: 'SERVER B', x: 200, y: 40, visibility: 'known', cleared: false, narrative: "Primary data center.", intel: ['Hidden safe'],
     challenges: [{ id: 'srch', type: 'search', status: 'active', searchSpots: [{ id: 'rack', name: 'RACK', hasItem: false, dc: 8 }, { id: 'desk', name: 'DESK', hasItem: true, item: { name: 'NOTES', type: 'intel' }, dc: 6 }]}],
-    exits: ['server_a', 'corridor'], exitVisibility: { corridor: 'suspected' } },
-  corridor: { id: 'corridor', name: 'CORRIDOR', x: 240, y: 70, visibility: 'suspected', cleared: false, narrative: "Patrol route. Polished floors.", intel: ['12-min cycles'],
-    challenges: [{ id: 'surv', type: 'surveillance', status: 'active' }], exits: ['server_a', 'server_b', 'vault_ante'], exitVisibility: { vault_ante: 'suspected' } },
-  vault_ante: { id: 'vault_ante', name: 'ANTECHAMBER', x: 180, y: 100, visibility: 'hidden', cleared: false, narrative: "Vault door dominates. Guard watches.", intel: ['3-digit combo'],
+    exits: ['server_a', 'corridor'], exitVisibility: { corridor: 'suspected' }, isTarget: true },
+  corridor: { id: 'corridor', name: 'CORRIDOR', x: 260, y: 70, visibility: 'suspected', cleared: false, narrative: "Patrol route. Polished floors.", intel: ['12-min cycles'],
+    challenges: [{ id: 'surv', type: 'surveillance', status: 'active' }], exits: ['server_a', 'server_b', 'vault_ante'], exitVisibility: { vault_ante: 'suspected' }, isTarget: true },
+  vault_ante: { id: 'vault_ante', name: 'ANTECHAMBER', x: 200, y: 100, visibility: 'hidden', cleared: false, narrative: "Vault door dominates. Guard watches.", intel: ['3-digit combo'],
     challenges: [{ id: 'guard', type: 'human', status: 'active', npc: { name: 'VICTOR', role: 'SECURITY', composure: 80, suspicion: 40, compliance: 5 }},
                  { id: 'lock', type: 'puzzle', status: 'locked', requires: 'guard', combination: [3,7,1], hint: "Badge reversed" }],
-    exits: ['corridor', 'vault'], exitVisibility: { vault: 'hidden' } },
-  vault: { id: 'vault', name: 'VAULT', x: 180, y: 140, visibility: 'hidden', cleared: false, narrative: "Deposit boxes. The target is here.", intel: ['Target in box'],
+    exits: ['corridor', 'vault'], exitVisibility: { vault: 'hidden' }, isTarget: true },
+  vault: { id: 'vault', name: 'VAULT', x: 200, y: 140, visibility: 'hidden', cleared: false, narrative: "Deposit boxes. The target is here.", intel: ['Target in box'],
     challenges: [{ id: 'final', type: 'search', status: 'active', searchSpots: [{ id: 'b1', name: 'BOX 1147', hasItem: false, dc: 8 }, { id: 'b2', name: 'BOX 1148', hasItem: true, item: { name: 'TARGET DOCS', type: 'objective' }, dc: 10 }]}],
-    exits: ['vault_ante'] }
+    exits: ['vault_ante'], isTarget: true }
 };
 
 const SLOANE = {
